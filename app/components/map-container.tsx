@@ -437,8 +437,8 @@ const MunicipalityChoropleth = memo(
       const name = (feature?.properties?.adm3_en ?? "").toLowerCase().trim();
       const risk = municipalityRisk[name];
       return {
-        fillColor: CHOROPLETH_FILL[risk] ?? "#f3f4f6",
-        fillOpacity: risk ? 0.5 : 0.05,
+        fillColor: CHOROPLETH_FILL[risk] ?? "#d1d5db",
+        fillOpacity: 0.5,
         color: "#9ca3af",
         weight: 0.8,
       };
