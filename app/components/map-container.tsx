@@ -406,65 +406,55 @@ const TarlacMask = memo(({ geoJson }: { geoJson: FeatureCollection }) => {
 });
 TarlacMask.displayName = "TarlacMask";
 
-// ── Heatmap layer ─────────────────────────────────────────────────────────────
-const RISK_INTENSITY: Record<string, number> = {
-  "VERY HIGH": 1.0,
-  HIGH:        0.75,
-  MEDIUM:      0.5,
-  LOW:         0.3,
-  "VERY LOW":  0.15,
+// ── Choropleth: municipalities coloured by liquefaction risk ─────────────────
+const RISK_ORDER_MAP: Record<string, number> = {
+  "VERY HIGH": 5, HIGH: 4, MEDIUM: 3, LOW: 2, "VERY LOW": 1,
+};
+const CHOROPLETH_FILL: Record<string, string> = {
+  "VERY HIGH": "#f87171",
+  HIGH:        "#fb923c",
+  MEDIUM:      "#fbbf24",
+  LOW:         "#fde68a",
+  "VERY LOW":  "#67e8f9",
 };
 
-const HeatmapLayer = memo(({ boreholes }: { boreholes: BoreholeFeature[] }) => {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!boreholes.length || typeof window === "undefined") return;
+const MunicipalityChoropleth = memo(
+  ({ geoJson, boreholes }: { geoJson: FeatureCollection; boreholes: BoreholeFeature[] }) => {
+    const municipalityRisk = useMemo(() => {
+      const map: Record<string, string> = {};
+      for (const bh of boreholes) {
+        if (!bh.municipality || !bh.risk_level) continue;
+        const key = bh.municipality.toLowerCase().trim();
+        if (!map[key] || (RISK_ORDER_MAP[bh.risk_level] ?? 0) > (RISK_ORDER_MAP[map[key]] ?? 0)) {
+          map[key] = bh.risk_level;
+        }
+      }
+      return map;
+    }, [boreholes]);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let heatLayer: any = null;
+    const styleFn = useCallback((feature: any) => {
+      const name = (feature?.properties?.adm3_en ?? "").toLowerCase().trim();
+      const risk = municipalityRisk[name];
+      return {
+        fillColor: CHOROPLETH_FILL[risk] ?? "#f3f4f6",
+        fillOpacity: risk ? 0.5 : 0.05,
+        color: "#9ca3af",
+        weight: 0.8,
+      };
+    }, [municipalityRisk]);
 
-    import("leaflet.heat").then(() => {
-      const L = (window as unknown as { L: typeof import("leaflet") }).L
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        ?? (globalThis as any).L
-        ?? _L;
-
-      if (!L) return;
-
-      const points = boreholes.map((bh) => [
-        bh.latitude,
-        bh.longitude,
-        RISK_INTENSITY[bh.risk_level] ?? 0.2,
-      ]);
-
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      heatLayer = (L as any).heatLayer(points, {
-        radius: 80,
-        blur: 60,
-        maxZoom: 14,
-        max: 1.0,
-        minOpacity: 0.35,
-        gradient: {
-          0.15: "#67e8f9", // cyan  — VERY LOW
-          0.30: "#fde68a", // yellow — LOW
-          0.50: "#fb923c", // orange — MEDIUM
-          0.75: "#f87171", // soft red — HIGH
-          1.00: "#dc2626", // red — VERY HIGH
-        },
-      });
-
-      heatLayer.addTo(map);
-    });
-
-    return () => {
-      if (heatLayer) map.removeLayer(heatLayer);
-    };
-  }, [map, boreholes]);
-
-  return null;
-});
-HeatmapLayer.displayName = "HeatmapLayer";
+    return (
+      <GeoJSON
+        key={`choropleth-${boreholes.length}`}
+        data={geoJson}
+        style={styleFn}
+        interactive={false}
+      />
+    );
+  }
+);
+MunicipalityChoropleth.displayName = "MunicipalityChoropleth";
 
 const geoJsonStyle = {
   fillColor: "#3b82f6",
@@ -486,6 +476,7 @@ interface LeafletMapContainerProps {
   markerPosition: [number, number] | null;
   setMarkerPosition: (pos: [number, number]) => void;
   tarlacGeoJson: FeatureCollection | null;
+  municiesGeoJson: FeatureCollection | null;
   loading: boolean;
   onRequestPrediction: (lat: number, lng: number) => void;
   boreholes?: BoreholeFeature[];
@@ -498,6 +489,7 @@ export const LeafletMapContainer = memo(
     markerPosition,
     setMarkerPosition,
     tarlacGeoJson,
+    municiesGeoJson,
     loading,
     onRequestPrediction,
     boreholes = [],
@@ -526,7 +518,9 @@ export const LeafletMapContainer = memo(
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          {boreholes.length > 0 && <HeatmapLayer boreholes={boreholes} />}
+          {municiesGeoJson && boreholes.length > 0 && (
+            <MunicipalityChoropleth geoJson={municiesGeoJson} boreholes={boreholes} />
+          )}
           {tarlacGeoJson && <TarlacMask geoJson={tarlacGeoJson} />}
           {tarlacGeoJson && (
             <GeoJSON data={tarlacGeoJson} style={geoJsonStyle} />

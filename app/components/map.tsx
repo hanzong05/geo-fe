@@ -118,6 +118,7 @@ export default function Map({
         markerPosition={markerPosition}
         setMarkerPosition={setMarkerPosition}
         tarlacGeoJson={tarlacGeoJson}
+        municiesGeoJson={municiesGeoJson}
         loading={loading}
         onRequestPrediction={onRequestPrediction}
         boreholes={boreholes}
