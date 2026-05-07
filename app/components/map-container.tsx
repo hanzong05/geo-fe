@@ -55,19 +55,17 @@ export interface BoreholeLegend {
 }
 
 // ── SVG pin icon factory ──────────────────────────────────────────────────────
-function createBoreholeIcon(color: string) {
+function createBoreholeIcon(riskLevel: string) {
   if (!_L) return null;
 
-  const colorMap: Record<
-    string,
-    { fill: string; stroke: string; label: string }
-  > = {
-    red: { fill: "#ef4444", stroke: "#991b1b", label: "H" },
-    orange: { fill: "#f97316", stroke: "#9a3412", label: "M" },
-    green: { fill: "#22c55e", stroke: "#15803d", label: "L" },
-    gray: { fill: "#9ca3af", stroke: "#4b5563", label: "?" },
+  const colorMap: Record<string, { fill: string; stroke: string; label: string }> = {
+    "VERY HIGH": { fill: "#dc2626", stroke: "#7f1d1d", label: "VH" },
+    "HIGH":      { fill: "#c2410c", stroke: "#7c2d12", label: "H"  },
+    "MEDIUM":    { fill: "#f97316", stroke: "#9a3412", label: "M"  },
+    "LOW":       { fill: "#facc15", stroke: "#a16207", label: "L"  },
+    "VERY LOW":  { fill: "#22d3ee", stroke: "#0e7490", label: "VL" },
   };
-  const c = colorMap[color] ?? colorMap.gray;
+  const c = colorMap[riskLevel] ?? { fill: "#9ca3af", stroke: "#4b5563", label: "?" };
 
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
@@ -168,33 +166,27 @@ LocationMarker.displayName = "LocationMarker";
 // ── BoreholeMarkers ───────────────────────────────────────────────────────────
 const BoreholeMarkers = memo(
   ({ boreholes }: { boreholes: BoreholeFeature[] }) => {
-    const BG = {
-      red: "#fef2f2",
-      orange: "#fff7ed",
-      green: "#f0fdf4",
-      gray: "#f9fafb",
+    const POPUP_BG: Record<string, string> = {
+      "VERY HIGH": "#fef2f2", HIGH: "#fff3ed",
+      MEDIUM: "#fff7ed", LOW: "#fefce8", "VERY LOW": "#ecfeff",
     };
-    const BDR = {
-      red: "#fca5a5",
-      orange: "#fdba74",
-      green: "#86efac",
-      gray: "#d1d5db",
+    const POPUP_BDR: Record<string, string> = {
+      "VERY HIGH": "#fca5a5", HIGH: "#fdba74",
+      MEDIUM: "#fed7aa", LOW: "#fde68a", "VERY LOW": "#a5f3fc",
     };
-    const TEXT = {
-      red: "#991b1b",
-      orange: "#9a3412",
-      green: "#15803d",
-      gray: "#4b5563",
+    const POPUP_TXT: Record<string, string> = {
+      "VERY HIGH": "#7f1d1d", HIGH: "#7c2d12",
+      MEDIUM: "#9a3412", LOW: "#a16207", "VERY LOW": "#0e7490",
     };
 
     return (
       <>
         {boreholes.map((bh) => {
-          const icon = createBoreholeIcon(bh.marker_color);
+          const icon = createBoreholeIcon(bh.risk_level);
           if (!icon) return null;
-          const bg = BG[bh.marker_color] ?? "#f9fafb";
-          const bdr = BDR[bh.marker_color] ?? "#d1d5db";
-          const txt = TEXT[bh.marker_color] ?? "#4b5563";
+          const bg  = POPUP_BG[bh.risk_level]  ?? "#f9fafb";
+          const bdr = POPUP_BDR[bh.risk_level] ?? "#d1d5db";
+          const txt = POPUP_TXT[bh.risk_level] ?? "#4b5563";
 
           return (
             <Marker
@@ -481,13 +473,6 @@ const LEGEND_CONFIG = [
     stroke: "#7c2d12",
     label: "High Risk",
     sub: "HIGH",
-  },
-  {
-    key: "orange2",
-    fill: "#f97316",
-    stroke: "#9a3412",
-    label: "Moderate Risk",
-    sub: "MEDIUM",
   },
   {
     key: "yellow",
