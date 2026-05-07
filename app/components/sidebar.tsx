@@ -130,11 +130,10 @@ export default function LiquefactionSidebar({
   const lpiSeverity = predictionData?.settlement.lpi_severity ?? "None";
 
   const lpiSeverityColor: Record<string, string> = {
-    "None": "text-green-600",
-    "Low": "text-yellow-600",
-    "Moderate": "text-orange-500",
-    "High": "text-red-600",
-    "Very High": "text-red-800",
+    "Very Low": "text-green-600",
+    "Low":      "text-yellow-600",
+    "High":     "text-red-600",
+    "Very High":"text-red-800",
   };
 
   const foundationBase = predictionData?.foundation_recommendation?.base_m;
@@ -533,16 +532,16 @@ export default function LiquefactionSidebar({
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <SectionHeader title="Foundation Recommendation" />
 
-                {foundationDepth !== undefined ? (
+                {foundationBase !== undefined ? (
                   <SubRow
-                    label="Depth (D) of Foundation"
-                    value={foundationDepth.toFixed(2)}
+                    label="Base (B) of Foundation"
+                    value={foundationBase.toFixed(2)}
                     unit="m"
                     accent="text-blue-700"
                   />
                 ) : (
                   <div className="py-2 text-xs text-slate-400">
-                    Depth (D) — awaiting API data
+                    Base (B) — awaiting API data
                   </div>
                 )}
               </div>
