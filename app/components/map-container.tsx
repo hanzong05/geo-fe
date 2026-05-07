@@ -58,33 +58,37 @@ export interface BoreholeLegend {
 function createBoreholeIcon(riskLevel: string) {
   if (!_L) return null;
 
-  const colorMap: Record<string, { fill: string; stroke: string; label: string }> = {
-    "VERY HIGH": { fill: "#dc2626", stroke: "#7f1d1d", label: "VH" },
-    "HIGH":      { fill: "#c2410c", stroke: "#7c2d12", label: "H"  },
-    "MEDIUM":    { fill: "#f97316", stroke: "#9a3412", label: "M"  },
-    "LOW":       { fill: "#facc15", stroke: "#a16207", label: "L"  },
-    "VERY LOW":  { fill: "#22d3ee", stroke: "#0e7490", label: "VL" },
+  const colorMap: Record<string, { fill: string; border: string; label: string }> = {
+    "VERY HIGH": { fill: "#dc2626", border: "#7f1d1d", label: "VH" },
+    "HIGH":      { fill: "#c2410c", border: "#7c2d12", label: "H"  },
+    "MEDIUM":    { fill: "#f97316", border: "#9a3412", label: "M"  },
+    "LOW":       { fill: "#ca8a04", border: "#713f12", label: "L"  },
+    "VERY LOW":  { fill: "#0891b2", border: "#164e63", label: "VL" },
   };
-  const c = colorMap[riskLevel] ?? { fill: "#9ca3af", stroke: "#4b5563", label: "?" };
+  const c = colorMap[riskLevel] ?? { fill: "#6b7280", border: "#374151", label: "?" };
 
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
+    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
       <defs>
-        <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/></filter>
+        <filter id="ds-${c.fill.slice(1)}">
+          <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.4)"/>
+        </filter>
       </defs>
-      <path d="M14 2 C7.373 2 2 7.373 2 14 C2 22 14 34 14 34 C14 34 26 22 26 14 C26 7.373 20.627 2 14 2 Z"
-            fill="${c.fill}" stroke="${c.stroke}" stroke-width="1.5" filter="url(#ds)"/>
-      <circle cx="14" cy="14" r="7" fill="white" opacity="0.9"/>
-      <text x="14" y="18" text-anchor="middle" font-family="system-ui,sans-serif"
-            font-size="9" font-weight="700" fill="${c.stroke}">${c.label}</text>
+      <circle cx="16" cy="16" r="13" fill="white" filter="url(#ds-${c.fill.slice(1)})"/>
+      <circle cx="16" cy="16" r="13" fill="${c.fill}" opacity="0.15"/>
+      <circle cx="16" cy="16" r="13" fill="none" stroke="${c.fill}" stroke-width="2.5"/>
+      <circle cx="16" cy="16" r="8" fill="${c.fill}"/>
+      <text x="16" y="20" text-anchor="middle" font-family="system-ui,sans-serif"
+            font-size="${riskLevel === "VERY HIGH" || riskLevel === "VERY LOW" ? "7" : "8"}"
+            font-weight="800" fill="white" letter-spacing="0">${c.label}</text>
     </svg>`;
 
   return _L.divIcon({
     html: svg,
     className: "",
-    iconSize: [28, 36],
-    iconAnchor: [14, 34],
-    popupAnchor: [0, -34],
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -18],
   });
 }
 
@@ -402,55 +406,65 @@ const TarlacMask = memo(({ geoJson }: { geoJson: FeatureCollection }) => {
 });
 TarlacMask.displayName = "TarlacMask";
 
-// ── Choropleth: municipalities coloured by liquefaction risk ─────────────────
-const RISK_ORDER_MAP: Record<string, number> = {
-  "VERY HIGH": 5, HIGH: 4, MEDIUM: 3, LOW: 2, "VERY LOW": 1,
-};
-const CHOROPLETH_FILL: Record<string, string> = {
-  "VERY HIGH": "#dc2626",
-  HIGH:        "#c2410c",
-  MEDIUM:      "#f97316",
-  LOW:         "#facc15",
-  "VERY LOW":  "#22d3ee",
+// ── Heatmap layer ─────────────────────────────────────────────────────────────
+const RISK_INTENSITY: Record<string, number> = {
+  "VERY HIGH": 1.0,
+  HIGH:        0.75,
+  MEDIUM:      0.5,
+  LOW:         0.3,
+  "VERY LOW":  0.15,
 };
 
-const MunicipalityChoropleth = memo(
-  ({ geoJson, boreholes }: { geoJson: FeatureCollection; boreholes: BoreholeFeature[] }) => {
-    const municipalityRisk = useMemo(() => {
-      const map: Record<string, string> = {};
-      for (const bh of boreholes) {
-        if (!bh.municipality || !bh.risk_level) continue;
-        const key = bh.municipality.toLowerCase().trim();
-        if (!map[key] || (RISK_ORDER_MAP[bh.risk_level] ?? 0) > (RISK_ORDER_MAP[map[key]] ?? 0)) {
-          map[key] = bh.risk_level;
-        }
-      }
-      return map;
-    }, [boreholes]);
+const HeatmapLayer = memo(({ boreholes }: { boreholes: BoreholeFeature[] }) => {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!boreholes.length || typeof window === "undefined") return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const styleFn = useCallback((feature: any) => {
-      const name = (feature?.properties?.adm3_en ?? "").toLowerCase().trim();
-      const risk = municipalityRisk[name];
-      return {
-        fillColor: CHOROPLETH_FILL[risk] ?? "#e5e7eb",
-        fillOpacity: risk ? 0.6 : 0.12,
-        color: "#374151",
-        weight: 1,
-      };
-    }, [municipalityRisk]);
+    let heatLayer: any = null;
 
-    return (
-      <GeoJSON
-        key={`choropleth-${boreholes.length}`}
-        data={geoJson}
-        style={styleFn}
-        interactive={false}
-      />
-    );
-  }
-);
-MunicipalityChoropleth.displayName = "MunicipalityChoropleth";
+    import("leaflet.heat").then(() => {
+      const L = (window as unknown as { L: typeof import("leaflet") }).L
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ?? (globalThis as any).L
+        ?? _L;
+
+      if (!L) return;
+
+      const points = boreholes.map((bh) => [
+        bh.latitude,
+        bh.longitude,
+        RISK_INTENSITY[bh.risk_level] ?? 0.2,
+      ]);
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      heatLayer = (L as any).heatLayer(points, {
+        radius: 80,
+        blur: 60,
+        maxZoom: 14,
+        max: 1.0,
+        minOpacity: 0.35,
+        gradient: {
+          0.15: "#67e8f9", // cyan  — VERY LOW
+          0.30: "#fde68a", // yellow — LOW
+          0.50: "#fb923c", // orange — MEDIUM
+          0.75: "#f87171", // soft red — HIGH
+          1.00: "#dc2626", // red — VERY HIGH
+        },
+      });
+
+      heatLayer.addTo(map);
+    });
+
+    return () => {
+      if (heatLayer) map.removeLayer(heatLayer);
+    };
+  }, [map, boreholes]);
+
+  return null;
+});
+HeatmapLayer.displayName = "HeatmapLayer";
 
 const geoJsonStyle = {
   fillColor: "#3b82f6",
@@ -460,41 +474,11 @@ const geoJsonStyle = {
 };
 
 const LEGEND_CONFIG = [
-  {
-    key: "red",
-    fill: "#dc2626",
-    stroke: "#991b1b",
-    label: "Very High Risk",
-    sub: "VERY HIGH",
-  },
-  {
-    key: "orange",
-    fill: "#c2410c",
-    stroke: "#7c2d12",
-    label: "High Risk",
-    sub: "HIGH",
-  },
-  {
-    key: "yellow",
-    fill: "#facc15",
-    stroke: "#a16207",
-    label: "Low Risk",
-    sub: "LOW",
-  },
-  {
-    key: "green",
-    fill: "#22d3ee",
-    stroke: "#0e7490",
-    label: "Very Low Risk",
-    sub: "VERY LOW",
-  },
-  {
-    key: "gray",
-    fill: "#9ca3af",
-    stroke: "#4b5563",
-    label: "No Data",
-    sub: "—",
-  },
+  { key: "red",    fill: "#f87171", stroke: "#dc2626", label: "Very High Risk", sub: "VERY HIGH" },
+  { key: "orange", fill: "#fb923c", stroke: "#c2410c", label: "High Risk",      sub: "HIGH"      },
+  { key: "yellow", fill: "#fde68a", stroke: "#ca8a04", label: "Low Risk",       sub: "LOW"       },
+  { key: "cyan",   fill: "#67e8f9", stroke: "#0891b2", label: "Very Low Risk",  sub: "VERY LOW"  },
+  { key: "gray",   fill: "#e5e7eb", stroke: "#9ca3af", label: "No Data",        sub: "—"         },
 ];
 
 // ── Main component props ──────────────────────────────────────────────────────
@@ -502,7 +486,6 @@ interface LeafletMapContainerProps {
   markerPosition: [number, number] | null;
   setMarkerPosition: (pos: [number, number]) => void;
   tarlacGeoJson: FeatureCollection | null;
-  municiesGeoJson: FeatureCollection | null;
   loading: boolean;
   onRequestPrediction: (lat: number, lng: number) => void;
   boreholes?: BoreholeFeature[];
@@ -515,7 +498,6 @@ export const LeafletMapContainer = memo(
     markerPosition,
     setMarkerPosition,
     tarlacGeoJson,
-    municiesGeoJson,
     loading,
     onRequestPrediction,
     boreholes = [],
@@ -544,9 +526,7 @@ export const LeafletMapContainer = memo(
             attribution="&copy; OpenStreetMap contributors"
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
-          {municiesGeoJson && boreholes.length > 0 && (
-            <MunicipalityChoropleth geoJson={municiesGeoJson} boreholes={boreholes} />
-          )}
+          {boreholes.length > 0 && <HeatmapLayer boreholes={boreholes} />}
           {tarlacGeoJson && <TarlacMask geoJson={tarlacGeoJson} />}
           {tarlacGeoJson && (
             <GeoJSON data={tarlacGeoJson} style={geoJsonStyle} />
