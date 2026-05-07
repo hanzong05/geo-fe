@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, memo, useMemo } from "react";
+import { useEffect, useRef, memo, useMemo, useCallback } from "react";
 import type { FeatureCollection } from "geojson";
 import {
   MapContainer,
