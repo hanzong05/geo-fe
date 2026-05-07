@@ -415,11 +415,11 @@ const RISK_ORDER_MAP: Record<string, number> = {
   "VERY HIGH": 5, HIGH: 4, MEDIUM: 3, LOW: 2, "VERY LOW": 1,
 };
 const CHOROPLETH_FILL: Record<string, string> = {
-  "VERY HIGH": "#dc2626",
-  HIGH:        "#ef4444",
-  MEDIUM:      "#f97316",
-  LOW:         "#eab308",
-  "VERY LOW":  "#84cc16",
+  "VERY HIGH": "#dc2626",  // bright red
+  HIGH:        "#c2410c",  // dark burnt orange
+  MEDIUM:      "#f97316",  // orange
+  LOW:         "#facc15",  // yellow
+  "VERY LOW":  "#22d3ee",  // cyan / teal
 };
 
 const MunicipalityChoropleth = memo(
@@ -470,24 +470,38 @@ const geoJsonStyle = {
 const LEGEND_CONFIG = [
   {
     key: "red",
-    fill: "#ef4444",
+    fill: "#dc2626",
     stroke: "#991b1b",
-    label: "Liquefiable",
-    sub: "HIGH / VERY HIGH",
+    label: "Very High Risk",
+    sub: "VERY HIGH",
   },
   {
     key: "orange",
+    fill: "#c2410c",
+    stroke: "#7c2d12",
+    label: "High Risk",
+    sub: "HIGH",
+  },
+  {
+    key: "orange2",
     fill: "#f97316",
     stroke: "#9a3412",
-    label: "Marginal",
+    label: "Moderate Risk",
     sub: "MEDIUM",
   },
   {
+    key: "yellow",
+    fill: "#facc15",
+    stroke: "#a16207",
+    label: "Low Risk",
+    sub: "LOW",
+  },
+  {
     key: "green",
-    fill: "#22c55e",
-    stroke: "#15803d",
-    label: "Non-Liquefiable",
-    sub: "LOW / VERY LOW",
+    fill: "#22d3ee",
+    stroke: "#0e7490",
+    label: "Very Low Risk",
+    sub: "VERY LOW",
   },
   {
     key: "gray",
