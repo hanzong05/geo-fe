@@ -68,27 +68,24 @@ function createBoreholeIcon(riskLevel: string) {
   const c = colorMap[riskLevel] ?? { fill: "#6b7280", border: "#374151", label: "?" };
 
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+    <svg xmlns="http://www.w3.org/2000/svg" width="28" height="36" viewBox="0 0 28 36">
       <defs>
-        <filter id="ds-${c.fill.slice(1)}">
-          <feDropShadow dx="0" dy="1" stdDeviation="2" flood-color="rgba(0,0,0,0.4)"/>
-        </filter>
+        <filter id="ds"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/></filter>
       </defs>
-      <circle cx="16" cy="16" r="13" fill="white" filter="url(#ds-${c.fill.slice(1)})"/>
-      <circle cx="16" cy="16" r="13" fill="${c.fill}" opacity="0.15"/>
-      <circle cx="16" cy="16" r="13" fill="none" stroke="${c.fill}" stroke-width="2.5"/>
-      <circle cx="16" cy="16" r="8" fill="${c.fill}"/>
-      <text x="16" y="20" text-anchor="middle" font-family="system-ui,sans-serif"
-            font-size="${riskLevel === "VERY HIGH" || riskLevel === "VERY LOW" ? "7" : "8"}"
-            font-weight="800" fill="white" letter-spacing="0">${c.label}</text>
+      <path d="M14 2 C7.373 2 2 7.373 2 14 C2 22 14 34 14 34 C14 34 26 22 26 14 C26 7.373 20.627 2 14 2 Z"
+            fill="${c.fill}" stroke="${c.border}" stroke-width="1.5" filter="url(#ds)"/>
+      <circle cx="14" cy="14" r="7" fill="white" opacity="0.9"/>
+      <text x="14" y="18" text-anchor="middle" font-family="system-ui,sans-serif"
+            font-size="${riskLevel === "VERY HIGH" || riskLevel === "VERY LOW" ? "7" : "9"}"
+            font-weight="700" fill="${c.border}">${c.label}</text>
     </svg>`;
 
   return _L.divIcon({
     html: svg,
     className: "",
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-    popupAnchor: [0, -18],
+    iconSize: [28, 36],
+    iconAnchor: [14, 34],
+    popupAnchor: [0, -34],
   });
 }
 
