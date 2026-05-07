@@ -44,6 +44,7 @@ export default function Map({
   const [tarlacGeoJson, setTarlacGeoJson] = useState<FeatureCollection | null>(
     null,
   );
+  const [municiesGeoJson, setMuniciesGeoJson] = useState<FeatureCollection | null>(null);
   const [boreholes, setBoreholes] = useState<BoreholeFeature[]>([]);
   const [boreholesLoading, setBoreholesLoading] = useState(false);
   const [legend, setLegend] = useState<Record<string, BoreholeLegend>>({});
@@ -74,9 +75,14 @@ export default function Map({
 
     const fetchBoundary = async () => {
       try {
-        const res = await fetch("/maps/tarlac-province.json");
-        const geoJson: FeatureCollection = await res.json();
-        setTarlacGeoJson(geoJson);
+        const [provRes, munRes] = await Promise.all([
+          fetch("/maps/tarlac-province.json"),
+          fetch("/maps/tarlac-municities.json"),
+        ]);
+        const provGeoJson: FeatureCollection = await provRes.json();
+        const munGeoJson: FeatureCollection = await munRes.json();
+        setTarlacGeoJson(provGeoJson);
+        setMuniciesGeoJson(munGeoJson);
       } catch (err) {
         console.error("Error loading Tarlac boundary:", err);
       } finally {
@@ -112,6 +118,7 @@ export default function Map({
         markerPosition={markerPosition}
         setMarkerPosition={setMarkerPosition}
         tarlacGeoJson={tarlacGeoJson}
+        municiesGeoJson={municiesGeoJson}
         loading={loading}
         onRequestPrediction={onRequestPrediction}
         boreholes={boreholes}

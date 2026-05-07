@@ -499,10 +499,11 @@ export default function LiquefactionSidebar({
                   </div>
 
                   <div className="text-right">
-                    <p className="text-xs text-slate-500 mb-0.5">Probability</p>
-                    <p className={`text-2xl font-bold ${riskColors.text}`}>
-                      {probability}%
+                    <p className="text-xs text-slate-500 mb-0.5">LPI</p>
+                    <p className={`text-2xl font-bold ${lpiSeverityColor[lpiSeverity] ?? riskColors.text}`}>
+                      {lpi.toFixed(2)}
                     </p>
+                    <p className="text-xs text-slate-400">{lpiSeverity}</p>
                   </div>
                 </div>
 
@@ -527,28 +528,10 @@ export default function LiquefactionSidebar({
                   value={settlementMm}
                   unit="mm"
                 />
-                <SubRow
-                  label="Liquefaction Potential Index (LPI)"
-                  value={`${lpi.toFixed(2)} (${lpiSeverity})`}
-                  accent={lpiSeverityColor[lpiSeverity] ?? "text-slate-900"}
-                />
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <SectionHeader title="Foundation Recommendation" />
-
-                {foundationBase !== undefined ? (
-                  <SubRow
-                    label="Base (B) of Foundation"
-                    value={foundationBase.toFixed(2)}
-                    unit="m"
-                    accent="text-blue-700"
-                  />
-                ) : (
-                  <div className="py-2 text-xs text-slate-400">
-                    Base (B) — awaiting API data
-                  </div>
-                )}
 
                 {foundationDepth !== undefined ? (
                   <SubRow
