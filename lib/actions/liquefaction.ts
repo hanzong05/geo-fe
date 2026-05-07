@@ -115,7 +115,11 @@ export async function predictByLocation(
         if (!response.ok) {
             const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
             console.error('[Server Action] API error:', error);
-            throw new Error(error.detail || `API returned ${response.status}`);
+            const detail = Array.isArray(error.detail)
+                ? error.detail.map((e: { msg: string; loc?: string[] }) =>
+                    `${e.loc?.slice(-1)[0] ?? 'field'}: ${e.msg}`).join('; ')
+                : (typeof error.detail === 'string' ? error.detail : `API returned ${response.status}`);
+            throw new Error(detail);
         }
 
         const data: PredictionResult = await response.json();
