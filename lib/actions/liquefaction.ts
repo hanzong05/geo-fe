@@ -11,31 +11,20 @@ const pythonHeaders = { 'Content-Type': 'application/json', 'x-api-key': process
 console.log('[Server Action] Python API URL:', PYTHON_API_URL);
 
 // ── Constants ──────────────────────────────────────────────────────────────
-/** Minimum physically valid moment magnitude.
- *  Passing anything below this (including 0 from uninitialised form state)
- *  inflates MSF to ~5.86 and zeroes out LPI entirely — BUG F.
- */
-const MW_MIN = 5.0;
 const MW_MAX = 9.5;
 const MW_DEFAULT = 6.5;   // design earthquake for Central Luzon / Tarlac
 
 /**
- * Sanitise a magnitude value received from the frontend.
- * Returns MW_DEFAULT when the value is falsy, NaN, or below MW_MIN.
- * Logs a warning so the issue is visible in Next.js server logs.
+ * Normalise a magnitude value from the frontend.
+ *  - undefined / null / NaN  → MW_DEFAULT (6.5)
+ *  - 0                       → 0 (valid static/no-earthquake case; API sets MSF=1.0)
+ *  - > MW_MAX                → MW_MAX
  */
-function sanitiseMagnitude(raw: number | undefined | null): number {
-    if (raw === undefined || raw === null || isNaN(raw) || raw < MW_MIN) {
-        if (raw !== undefined && raw !== null && !isNaN(raw) && raw < MW_MIN) {
-            console.warn(
-                `[BUG F] predictByLocation received magnitude=${raw}. ` +
-                `Values below ${MW_MIN} inflate MSF by up to 5× and zero all LPI. ` +
-                `Using default Mw=${MW_DEFAULT}.`
-            );
-        }
+function normaliseMagnitude(raw: number | undefined | null): number {
+    if (raw === undefined || raw === null || isNaN(raw)) {
         return MW_DEFAULT;
     }
-    return Math.min(raw, MW_MAX);
+    return Math.min(raw, MW_MAX);   // 0 passes through unchanged
 }
 
 
@@ -139,12 +128,9 @@ export async function predictByLocation(
     depth?: number,
     tYears?: number,
 ) {
-    // ── BUG F FIX ────────────────────────────────────────────────────────
-    // magnitude=0 comes from uninitialised form state (e.g. a slider that
-    // starts at 0 before the user touches it, or a number input left blank
-    // that coerces to 0).  Passing it to the API causes MSF≈5.86 which
-    // multiplies every FS by ~5.9 and makes LPI = 0.00 for all sites.
-    const safeMagnitude = sanitiseMagnitude(magnitude);
+    // magnitude=0 is valid (static/no-earthquake → API uses MSF=1.0).
+    // Only undefined/null/NaN falls back to the default of 6.5.
+    const safeMagnitude = normaliseMagnitude(magnitude);
 
     const params = new URLSearchParams({
         latitude: String(latitude),
@@ -184,18 +170,16 @@ export async function predictByLocation(
 
         const data: PredictionResult = await response.json();
 
-        // ── Sanity-check the response so callers don't silently see LPI=0 ──
+        // ── Log key result fields for observability ───────────────────────
         const lpi = data.settlement?.lpi;
-        if (lpi === 0 || lpi === undefined) {
-            const mswUsed = data.analysis_parameters?.msf;
-            const mwUsed = data.analysis_parameters?.magnitude_mw;
-            if (mswUsed !== undefined && mswUsed > 1.5) {
-                console.error(
-                    `[BUG F DETECTED] Response has LPI=0 and MSF=${mswUsed} (Mw=${mwUsed}). ` +
-                    `The Python API received an inflated magnitude. ` +
-                    `Check that magnitude was not sent as 0 or below ${MW_MIN}.`
-                );
-            }
+        const msfVal = data.analysis_parameters?.msf;
+        const mwVal = data.analysis_parameters?.magnitude_mw;
+        // LPI=0 with MSF=1.0 and Mw=0 is expected (static case) — not an error.
+        if ((lpi === 0 || lpi === undefined) && mwVal !== 0 && msfVal !== undefined && msfVal > 1.5) {
+            console.error(
+                `[WARN] LPI=0 but MSF=${msfVal} (Mw=${mwVal}) — ` +
+                `unexpected inflation. Check magnitude input.`
+            );
         }
 
         console.log(
