@@ -127,7 +127,6 @@ export async function predictByLocation(
     magnitude?: number,
     depth?: number,
     tYears?: number,
-    pgaG?: number,          // Peak Ground Acceleration in g — overrides DB value
 ) {
     // magnitude=0 is valid (static/no-earthquake → API uses MSF=1.0).
     // Only undefined/null/NaN falls back to the default of 7.0.
@@ -142,7 +141,6 @@ export async function predictByLocation(
     if (qActual !== undefined && !isNaN(qActual)) params.set('q_actual', String(qActual));
     if (depth !== undefined && !isNaN(depth)) params.set('depth', String(depth));
     if (tYears !== undefined && !isNaN(tYears)) params.set('t_years', String(tYears));
-    if (pgaG !== undefined && !isNaN(pgaG) && pgaG > 0) params.set('pga_g', String(pgaG));
 
     const url = `${PYTHON_API_URL}/predict-by-location?${params.toString()}`;
 

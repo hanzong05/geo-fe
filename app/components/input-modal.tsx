@@ -9,7 +9,6 @@ interface InputModalProps {
     magnitude: number,
     depth: number,
     tYears: number,
-    pgaG: number,
   ) => void;
   onClose: () => void;
 }
@@ -25,7 +24,6 @@ export default function InputModal({
   const [buildingLoad, setBuildingLoad] = useState("1500"); // P in kN
   const [magnitude, setMagnitude] = useState("7.0");
   const [tYears, setTYears] = useState("50");
-  const [pgaG, setPgaG] = useState("0.4");
 
   if (!open) return null;
 
@@ -36,25 +34,22 @@ export default function InputModal({
     const d = parseFloat(depth); // m
     const mw = parseFloat(magnitude); // Mw
     const t = parseFloat(tYears); // years
-    const pga = parseFloat(pgaG); // g
 
     if (isNaN(P) || P < 0) return;
     if (isNaN(d) || d < 0) return;
     if (isNaN(t) || t < 0) return;
-    if (isNaN(pga) || pga < 0) return;
 
     // Convert building load (kN) → contact pressure (kPa)
     // q_actual = P / B²  where B = footing width (m)
     const q_actual = P / (FOOTING_WIDTH_B * FOOTING_WIDTH_B);
 
-    onSubmit(q_actual, isNaN(mw) ? 7.0 : mw, d, t, pga);
+    onSubmit(q_actual, isNaN(mw) ? 7.0 : mw, d, t);
 
     // reset to defaults
     setDepth("1.5");
     setBuildingLoad("1500");
     setMagnitude("7.0");
     setTYears("50");
-    setPgaG("0.4");
   };
 
   const handleClose = () => {
@@ -62,23 +57,14 @@ export default function InputModal({
     setBuildingLoad("1500");
     setMagnitude("7.0");
     setTYears("50");
-    setPgaG("0.4");
     onClose();
   };
 
   const P = parseFloat(buildingLoad);
   const d = parseFloat(depth);
   const t = parseFloat(tYears);
-  const pga = parseFloat(pgaG);
   const isValid =
-    !isNaN(P) &&
-    P >= 0 &&
-    !isNaN(d) &&
-    d >= 0 &&
-    !isNaN(t) &&
-    t >= 0 &&
-    !isNaN(pga) &&
-    pga >= 0;
+    !isNaN(P) && P >= 0 && !isNaN(d) && d >= 0 && !isNaN(t) && t >= 0;
 
   // live preview of q_actual
   const qPreview = isNaN(P)
@@ -151,26 +137,6 @@ export default function InputModal({
             />
             <p className="text-xs text-slate-400 mt-1">
               Use 0 for static (no-earthquake) analysis
-            </p>
-          </div>
-
-          {/* PGA */}
-          <div>
-            <label className="block text-xs font-medium text-slate-700 mb-1">
-              Peak Ground Acceleration — PGA (g)
-            </label>
-            <input
-              type="number"
-              min="0"
-              max="3"
-              step="0.05"
-              placeholder="e.g. 0.4"
-              value={pgaG}
-              onChange={(e) => setPgaG(e.target.value)}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
-            />
-            <p className="text-xs text-slate-400 mt-1">
-              Tarlac design PGA = 0.4g (PHIVOLCS)
             </p>
           </div>
 
