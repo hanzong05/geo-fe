@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
   try {
     const res = await fetch(url, {
       headers: { "x-api-key": API_SECRET_KEY },
-      next: { revalidate: 60 },
+      cache: "no-store",
     });
 
     if (!res.ok) {

@@ -10,6 +10,34 @@ const pythonHeaders = { 'Content-Type': 'application/json', 'x-api-key': process
 // Log on startup to debug
 console.log('[Server Action] Python API URL:', PYTHON_API_URL);
 
+// ── Constants ──────────────────────────────────────────────────────────────
+/** Minimum physically valid moment magnitude.
+ *  Passing anything below this (including 0 from uninitialised form state)
+ *  inflates MSF to ~5.86 and zeroes out LPI entirely — BUG F.
+ */
+const MW_MIN = 5.0;
+const MW_MAX = 9.5;
+const MW_DEFAULT = 6.5;   // design earthquake for Central Luzon / Tarlac
+
+/**
+ * Sanitise a magnitude value received from the frontend.
+ * Returns MW_DEFAULT when the value is falsy, NaN, or below MW_MIN.
+ * Logs a warning so the issue is visible in Next.js server logs.
+ */
+function sanitiseMagnitude(raw: number | undefined | null): number {
+    if (raw === undefined || raw === null || isNaN(raw) || raw < MW_MIN) {
+        if (raw !== undefined && raw !== null && !isNaN(raw) && raw < MW_MIN) {
+            console.warn(
+                `[BUG F] predictByLocation received magnitude=${raw}. ` +
+                `Values below ${MW_MIN} inflate MSF by up to 5× and zero all LPI. ` +
+                `Using default Mw=${MW_DEFAULT}.`
+            );
+        }
+        return MW_DEFAULT;
+    }
+    return Math.min(raw, MW_MAX);
+}
+
 
 export interface PredictionInput {
     latitude: number;
@@ -30,7 +58,7 @@ export interface PredictionResult {
         municipality?: string;
     };
     risk_assessment: {
-        risk_level: 'VERY LOW' | 'LOW' | 'HIGH' | 'VERY HIGH';
+        risk_level: 'VERY LOW' | 'LOW' | 'MEDIUM' | 'HIGH' | 'VERY HIGH';
         probability: number;
         severity: string;
         factor_of_safety?: number;
@@ -64,6 +92,23 @@ export interface PredictionResult {
         allowable_settlement_mm?: number;
     };
     recommendations: string[];
+    analysis_parameters?: {
+        q_actual_kpa: number;
+        magnitude_mw: number;
+        msf: number;
+        [key: string]: unknown;
+    };
+    interpolation_info?: {
+        boreholes_used: number;
+        nearest_distance_km: number;
+        confidence: string;
+        borehole_contributions: Array<{
+            id: string;
+            distance_km: number;
+            weight: number;
+        }>;
+        [key: string]: unknown;
+    };
 }
 
 export interface NearestBoreholeResult {
@@ -94,11 +139,24 @@ export async function predictByLocation(
     depth?: number,
     tYears?: number,
 ) {
-    let url = `${PYTHON_API_URL}/predict-by-location?latitude=${latitude}&longitude=${longitude}`;
-    if (qActual !== undefined) url += `&q_actual=${qActual}`;
-    if (magnitude !== undefined) url += `&magnitude=${magnitude}`;
-    if (depth !== undefined) url += `&depth=${depth}`;
-    if (tYears !== undefined) url += `&t_years=${tYears}`;
+    // ── BUG F FIX ────────────────────────────────────────────────────────
+    // magnitude=0 comes from uninitialised form state (e.g. a slider that
+    // starts at 0 before the user touches it, or a number input left blank
+    // that coerces to 0).  Passing it to the API causes MSF≈5.86 which
+    // multiplies every FS by ~5.9 and makes LPI = 0.00 for all sites.
+    const safeMagnitude = sanitiseMagnitude(magnitude);
+
+    const params = new URLSearchParams({
+        latitude: String(latitude),
+        longitude: String(longitude),
+        magnitude: String(safeMagnitude),  // always sent — never omitted
+    });
+
+    if (qActual !== undefined && !isNaN(qActual)) params.set('q_actual', String(qActual));
+    if (depth !== undefined && !isNaN(depth)) params.set('depth', String(depth));
+    if (tYears !== undefined && !isNaN(tYears)) params.set('t_years', String(tYears));
+
+    const url = `${PYTHON_API_URL}/predict-by-location?${params.toString()}`;
 
     console.log('[Server Action] Fetching prediction from:', url);
 
@@ -107,7 +165,7 @@ export async function predictByLocation(
             method: 'GET',
             headers: pythonHeaders,
             cache: 'no-store',
-            signal: AbortSignal.timeout(30000), // 30 second timeout
+            signal: AbortSignal.timeout(30_000),
         });
 
         console.log('[Server Action] Response status:', response.status);
@@ -118,50 +176,63 @@ export async function predictByLocation(
             const detail = Array.isArray(error.detail)
                 ? error.detail.map((e: { msg: string; loc?: string[] }) =>
                     `${e.loc?.slice(-1)[0] ?? 'field'}: ${e.msg}`).join('; ')
-                : (typeof error.detail === 'string' ? error.detail : `API returned ${response.status}`);
+                : (typeof error.detail === 'string'
+                    ? error.detail
+                    : `API returned ${response.status}`);
             throw new Error(detail);
         }
 
         const data: PredictionResult = await response.json();
-        console.log('[Server Action] Prediction successful');
+
+        // ── Sanity-check the response so callers don't silently see LPI=0 ──
+        const lpi = data.settlement?.lpi;
+        if (lpi === 0 || lpi === undefined) {
+            const mswUsed = data.analysis_parameters?.msf;
+            const mwUsed = data.analysis_parameters?.magnitude_mw;
+            if (mswUsed !== undefined && mswUsed > 1.5) {
+                console.error(
+                    `[BUG F DETECTED] Response has LPI=0 and MSF=${mswUsed} (Mw=${mwUsed}). ` +
+                    `The Python API received an inflated magnitude. ` +
+                    `Check that magnitude was not sent as 0 or below ${MW_MIN}.`
+                );
+            }
+        }
+
+        console.log(
+            `[Server Action] Prediction OK — LPI=${data.settlement?.lpi} ` +
+            `risk=${data.risk_assessment?.risk_level} ` +
+            `Mw=${data.analysis_parameters?.magnitude_mw} ` +
+            `MSF=${data.analysis_parameters?.msf}`
+        );
+
         return { success: true, data };
 
     } catch (error) {
         console.error('[Server Action] Prediction error:', error);
 
-        // Provide helpful error messages
         if (error instanceof Error) {
             if (error.name === 'AbortError') {
                 return {
                     success: false,
-                    error: 'Request timeout - Python API took too long to respond'
+                    error: 'Request timeout — Python API took too long to respond',
                 };
             }
-
             if (error.message.includes('ECONNREFUSED')) {
                 return {
                     success: false,
-                    error: `Cannot connect to Python API at ${PYTHON_API_URL}. Make sure it's running: python api_corrected.py`
+                    error: `Cannot connect to Python API at ${PYTHON_API_URL}. Make sure it's running.`,
                 };
             }
-
             if (error.message.includes('ENOTFOUND') || error.message.includes('getaddrinfo')) {
                 return {
                     success: false,
-                    error: `Cannot resolve hostname in ${PYTHON_API_URL}. Check your PYTHON_SERVICE_URL environment variable.`
+                    error: `Cannot resolve hostname in ${PYTHON_API_URL}. Check PYTHON_SERVICE_URL.`,
                 };
             }
-
-            return {
-                success: false,
-                error: error.message
-            };
+            return { success: false, error: error.message };
         }
 
-        return {
-            success: false,
-            error: 'Prediction failed with unknown error'
-        };
+        return { success: false, error: 'Prediction failed with unknown error' };
     }
 }
 
@@ -177,7 +248,7 @@ export async function predictLiquefaction(input: PredictionInput) {
             headers: pythonHeaders,
             body: JSON.stringify(input),
             cache: 'no-store',
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(15_000),
         });
 
         if (!response.ok) {
@@ -192,7 +263,7 @@ export async function predictLiquefaction(input: PredictionInput) {
         console.error('[Server Action] Prediction error:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Prediction failed'
+            error: error instanceof Error ? error.message : 'Prediction failed',
         };
     }
 }
@@ -206,7 +277,7 @@ export async function getNearestBorehole(latitude: number, longitude: number) {
             method: 'GET',
             headers: pythonHeaders,
             cache: 'no-store',
-            signal: AbortSignal.timeout(15000),
+            signal: AbortSignal.timeout(15_000),
         });
 
         if (!response.ok) {
@@ -221,7 +292,7 @@ export async function getNearestBorehole(latitude: number, longitude: number) {
         console.error('[Server Action] Borehole fetch error:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Failed to fetch borehole data'
+            error: error instanceof Error ? error.message : 'Failed to fetch borehole data',
         };
     }
 }
@@ -236,12 +307,10 @@ export async function checkBackendHealth() {
         const response = await fetch(url, {
             method: 'GET',
             headers: pythonHeaders,
-            signal: AbortSignal.timeout(5000), // Shorter timeout for health check
+            signal: AbortSignal.timeout(5_000),
         });
 
-        if (!response.ok) {
-            throw new Error(`Health check returned ${response.status}`);
-        }
+        if (!response.ok) throw new Error(`Health check returned ${response.status}`);
 
         const data = await response.json();
         console.log('[Server Action] Backend is healthy:', data);
@@ -253,7 +322,7 @@ export async function checkBackendHealth() {
         if (error instanceof Error && error.message.includes('ECONNREFUSED')) {
             return {
                 success: false,
-                error: `Backend unavailable at ${PYTHON_API_URL}. Start it with: python api_corrected.py`
+                error: `Backend unavailable at ${PYTHON_API_URL}. Start it with: python main.py`,
             };
         }
 
@@ -279,7 +348,7 @@ export async function startTrainingPipeline() {
             method: 'POST',
             headers: pythonHeaders,
             cache: 'no-store',
-            signal: AbortSignal.timeout(30000), // Longer timeout for pipeline start
+            signal: AbortSignal.timeout(30_000),
         });
 
         if (!response.ok) {
@@ -294,7 +363,7 @@ export async function startTrainingPipeline() {
         console.error('[Server Action] Pipeline start error:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Failed to start pipeline'
+            error: error instanceof Error ? error.message : 'Failed to start pipeline',
         };
     }
 }
@@ -305,12 +374,10 @@ export async function getTrainingPipelineStatus() {
             method: 'GET',
             headers: pythonHeaders,
             cache: 'no-store',
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(5_000),
         });
 
-        if (!response.ok) {
-            throw new Error('Failed to get pipeline status');
-        }
+        if (!response.ok) throw new Error('Failed to get pipeline status');
 
         const data: PipelineStatus = await response.json();
         return { success: true, data };
@@ -319,7 +386,7 @@ export async function getTrainingPipelineStatus() {
         console.error('[Server Action] Pipeline status error:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Failed to get status'
+            error: error instanceof Error ? error.message : 'Failed to get status',
         };
     }
 }
@@ -330,12 +397,10 @@ export async function getTrainingPipelineLogs(limit: number = 50) {
             method: 'GET',
             headers: pythonHeaders,
             cache: 'no-store',
-            signal: AbortSignal.timeout(5000),
+            signal: AbortSignal.timeout(5_000),
         });
 
-        if (!response.ok) {
-            throw new Error('Failed to get pipeline logs');
-        }
+        if (!response.ok) throw new Error('Failed to get pipeline logs');
 
         const data = await response.json();
         return { success: true, data };
@@ -344,8 +409,7 @@ export async function getTrainingPipelineLogs(limit: number = 50) {
         console.error('[Server Action] Pipeline logs error:', error);
         return {
             success: false,
-            error: error instanceof Error ? error.message : 'Failed to get logs'
+            error: error instanceof Error ? error.message : 'Failed to get logs',
         };
     }
 }
-
