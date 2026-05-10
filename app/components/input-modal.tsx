@@ -4,67 +4,108 @@ import { useState } from "react";
 
 interface InputModalProps {
   open: boolean;
-  onSubmit: (qActual: number, magnitude: number, depth: number, tYears: number) => void;
+  onSubmit: (
+    qActual: number,
+    magnitude: number,
+    depth: number,
+    tYears: number,
+    pgaG: number,
+  ) => void;
   onClose: () => void;
 }
 
-export default function InputModal({ open, onSubmit, onClose }: InputModalProps) {
-  const [depth, setDepth] = useState("");
-  const [qActual, setQActual] = useState("");
-  const [magnitude, setMagnitude] = useState("0");
-  const [tYears, setTYears] = useState("");
+const FOOTING_WIDTH_B = 3.0; // default footing width in metres
+
+export default function InputModal({
+  open,
+  onSubmit,
+  onClose,
+}: InputModalProps) {
+  const [depth, setDepth] = useState("1.5");
+  const [buildingLoad, setBuildingLoad] = useState("1500"); // P in kN
+  const [magnitude, setMagnitude] = useState("7.0");
+  const [tYears, setTYears] = useState("50");
+  const [pgaG, setPgaG] = useState("0.4");
 
   if (!open) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const q = parseFloat(qActual);
-    const d = parseFloat(depth);
-    const t = parseFloat(tYears);
-    if (isNaN(q) || q < 0) return;
+
+    const P = parseFloat(buildingLoad); // kN
+    const d = parseFloat(depth); // m
+    const mw = parseFloat(magnitude); // Mw
+    const t = parseFloat(tYears); // years
+    const pga = parseFloat(pgaG); // g
+
+    if (isNaN(P) || P < 0) return;
     if (isNaN(d) || d < 0) return;
     if (isNaN(t) || t < 0) return;
-    onSubmit(q, parseFloat(magnitude), d, t);
-    setDepth("");
-    setQActual("");
-    setMagnitude("0");
-    setTYears("");
+    if (isNaN(pga) || pga < 0) return;
+
+    // Convert building load (kN) → contact pressure (kPa)
+    // q_actual = P / B²  where B = footing width (m)
+    const q_actual = P / (FOOTING_WIDTH_B * FOOTING_WIDTH_B);
+
+    onSubmit(q_actual, isNaN(mw) ? 7.0 : mw, d, t, pga);
+
+    // reset to defaults
+    setDepth("1.5");
+    setBuildingLoad("1500");
+    setMagnitude("7.0");
+    setTYears("50");
+    setPgaG("0.4");
   };
 
   const handleClose = () => {
-    setDepth("");
-    setQActual("");
-    setMagnitude("0");
-    setTYears("");
+    setDepth("1.5");
+    setBuildingLoad("1500");
+    setMagnitude("7.0");
+    setTYears("50");
+    setPgaG("0.4");
     onClose();
   };
 
+  const P = parseFloat(buildingLoad);
+  const d = parseFloat(depth);
+  const t = parseFloat(tYears);
+  const pga = parseFloat(pgaG);
   const isValid =
-    qActual && parseFloat(qActual) >= 0 &&
-    depth && parseFloat(depth) >= 0 &&
-    tYears && parseFloat(tYears) >= 0;
+    !isNaN(P) &&
+    P >= 0 &&
+    !isNaN(d) &&
+    d >= 0 &&
+    !isNaN(t) &&
+    t >= 0 &&
+    !isNaN(pga) &&
+    pga >= 0;
+
+  // live preview of q_actual
+  const qPreview = isNaN(P)
+    ? null
+    : (P / (FOOTING_WIDTH_B * FOOTING_WIDTH_B)).toFixed(2);
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/40 backdrop-blur-sm">
-      <div className="bg-white rounded-xl shadow-xl px-6 py-6 w-[320px] sm:w-[380px]">
+      <div className="bg-white rounded-xl shadow-xl px-6 py-6 w-[340px] sm:w-[400px]">
         <h2 className="text-base font-semibold text-slate-900 mb-1">
           Location Parameters
         </h2>
         <p className="text-xs text-slate-500 mb-5">
-          Enter building details before running the analysis.
+          Enter building and site details before running the analysis.
         </p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Depth */}
+          {/* Foundation Depth */}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
-              Depth (m)
+              Foundation Depth — Df (m)
             </label>
             <input
               type="number"
               min="0"
               step="0.1"
-              placeholder="e.g. 3.0"
+              placeholder="e.g. 1.5"
               value={depth}
               onChange={(e) => setDepth(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
@@ -72,20 +113,25 @@ export default function InputModal({ open, onSubmit, onClose }: InputModalProps)
             />
           </div>
 
-          {/* Building Weight */}
+          {/* Building Load */}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
-              Building Weight — q actual (Kilonewtons)
+              Building Load — P (kN)
             </label>
             <input
               type="number"
               min="0"
               step="1"
-              placeholder="e.g. 120"
-              value={qActual}
-              onChange={(e) => setQActual(e.target.value)}
+              placeholder="e.g. 1500"
+              value={buildingLoad}
+              onChange={(e) => setBuildingLoad(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
             />
+            {qPreview && (
+              <p className="text-xs text-slate-400 mt-1">
+                q_actual = {qPreview} kPa (P / B² = P / {FOOTING_WIDTH_B}²)
+              </p>
+            )}
           </div>
 
           {/* Earthquake Magnitude */}
@@ -96,17 +142,42 @@ export default function InputModal({ open, onSubmit, onClose }: InputModalProps)
             <input
               type="number"
               min="0"
+              max="9.5"
               step="0.1"
+              placeholder="e.g. 7.0"
               value={magnitude}
               onChange={(e) => setMagnitude(e.target.value)}
               className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
             />
+            <p className="text-xs text-slate-400 mt-1">
+              Use 0 for static (no-earthquake) analysis
+            </p>
           </div>
 
-          {/* t in years */}
+          {/* PGA */}
           <div>
             <label className="block text-xs font-medium text-slate-700 mb-1">
-              t (years)
+              Peak Ground Acceleration — PGA (g)
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="3"
+              step="0.05"
+              placeholder="e.g. 0.4"
+              value={pgaG}
+              onChange={(e) => setPgaG(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-transparent"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              Tarlac design PGA = 0.4g (PHIVOLCS)
+            </p>
+          </div>
+
+          {/* Design Life */}
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-1">
+              Design Life — t (years)
             </label>
             <input
               type="number"
