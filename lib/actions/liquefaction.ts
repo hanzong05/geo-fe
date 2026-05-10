@@ -12,7 +12,7 @@ console.log('[Server Action] Python API URL:', PYTHON_API_URL);
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const MW_MAX = 9.5;
-const MW_DEFAULT = 6.5;   // design earthquake for Central Luzon / Tarlac
+const MW_DEFAULT = 7.0;   // design earthquake for Central Luzon / Tarlac
 
 /**
  * Normalise a magnitude value from the frontend.
@@ -127,9 +127,10 @@ export async function predictByLocation(
     magnitude?: number,
     depth?: number,
     tYears?: number,
+    pgaG?: number,          // Peak Ground Acceleration in g — overrides DB value
 ) {
     // magnitude=0 is valid (static/no-earthquake → API uses MSF=1.0).
-    // Only undefined/null/NaN falls back to the default of 6.5.
+    // Only undefined/null/NaN falls back to the default of 7.0.
     const safeMagnitude = normaliseMagnitude(magnitude);
 
     const params = new URLSearchParams({
@@ -141,6 +142,7 @@ export async function predictByLocation(
     if (qActual !== undefined && !isNaN(qActual)) params.set('q_actual', String(qActual));
     if (depth !== undefined && !isNaN(depth)) params.set('depth', String(depth));
     if (tYears !== undefined && !isNaN(tYears)) params.set('t_years', String(tYears));
+    if (pgaG !== undefined && !isNaN(pgaG) && pgaG > 0) params.set('pga_g', String(pgaG));
 
     const url = `${PYTHON_API_URL}/predict-by-location?${params.toString()}`;
 
