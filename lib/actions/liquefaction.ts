@@ -352,6 +352,116 @@ export async function startTrainingPipeline() {
     }
 }
 
+
+export interface DirectLayerInput {
+    depth_from_m: number;
+    depth_to_m: number;
+    spt_n_value: number;
+    unit_weight?: number;
+    fines_content?: number;
+    groundwater_depth_m?: number;
+    pga_g?: number;
+    csr?: number;   // computed if omitted
+    cyclic_strength_ratio?: number;  // computed if omitted
+}
+
+export interface DirectPredictionResult {
+    source: string;
+    magnitude_mw: number;
+    msf: number;
+    risk_assessment: {
+        risk_level: string;
+        probability: number;
+        severity: string;
+        lpi: number;
+        lpi_severity: string;
+        critical_layer: number;
+        factor_of_safety: number;
+    };
+    layers: Array<{
+        layer_number: number;
+        depth_from_m: number;
+        depth_to_m: number;
+        depth_mid_m: number;
+        spt_n_value: number;
+        n1_60cs: number;
+        csr: number;
+        crr: number;
+        fs: number;
+        liquefaction_risk_level: string;
+    }>;
+    settlement: {
+        settlement_cm: number;
+        settlement_mm: number;
+    };
+    bearing_capacity: {
+        qa_kpa: number;
+        allowable_bearing_kpa: number;
+        capacity_reduction_percent: number;
+    };
+}
+
+/**
+ * Predict liquefaction directly from soil parameters — no DB lookup.
+ * Use for validation: supply the same values as the manual spreadsheet.
+ *
+ * Example for your validation row:
+ *   predictDirect({
+ *     magnitude: 7.0,
+ *     q_actual_kpa: 166.67,
+ *     depth_m: 1.5,
+ *     layers: [{
+ *       depth_from_m: 0, depth_to_m: 6,
+ *       spt_n_value: 17, unit_weight: 19.6,
+ *       fines_content: 52.09, groundwater_depth_m: 2,
+ *       pga_g: 0.36,
+ *     }]
+ *   })
+ */
+export async function predictDirect(input: {
+    magnitude?: number;
+    q_actual_kpa?: number;
+    depth_m?: number;
+    t_years?: number;
+    layers: DirectLayerInput[];
+}) {
+    const url = `${PYTHON_API_URL}/predict-direct`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: pythonHeaders,
+            body: JSON.stringify(input),
+            cache: 'no-store',
+            signal: AbortSignal.timeout(15_000),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+            throw new Error(
+                Array.isArray(error.detail)
+                    ? error.detail.map((e: { msg: string }) => e.msg).join('; ')
+                    : error.detail || 'Direct prediction failed'
+            );
+        }
+
+        const data: DirectPredictionResult = await response.json();
+        console.log(
+            `[predictDirect] LPI=${data.risk_assessment.lpi} ` +
+            `FS=${data.risk_assessment.factor_of_safety} ` +
+            `risk=${data.risk_assessment.risk_level}`
+        );
+        return { success: true, data };
+
+    } catch (error) {
+        console.error('[predictDirect] error:', error);
+        return {
+            success: false,
+            error: error instanceof Error ? error.message : 'Direct prediction failed',
+        };
+    }
+}
+
 export async function getTrainingPipelineStatus() {
     try {
         const response = await fetch(`${PYTHON_API_URL}/pipeline/status`, {
