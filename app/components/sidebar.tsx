@@ -361,8 +361,8 @@ export default function LiquefactionSidebar({
     applySectionStyle(ws.addRow(["FOUNDATION RECOMMENDATION", "", ""]));
     applySubHeaderStyle(ws.addRow(["Parameter", "Value", "Unit"]));
     [
-      ["Base Width (B)", foundationBase !== undefined ? foundationBase.toFixed(2) : "N/A", "m"],
-      ["Foundation Depth (D)", foundationDepth !== undefined ? foundationDepth.toFixed(2) : "N/A", "m"],
+      ["Base Width (B)", foundationBase != null ? (foundationBase as number).toFixed(2) : "N/A", "m"],
+      ["Foundation Depth (D)", foundationDepth != null ? (foundationDepth as number).toFixed(2) : "N/A", "m"],
     ].forEach((r) => applyDataStyle(ws.addRow(r)));
 
     const wsRecs = wb.addWorksheet("Recommendations");
@@ -532,10 +532,10 @@ export default function LiquefactionSidebar({
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                 <SectionHeader title="Foundation Recommendation" />
 
-                {foundationBase !== undefined ? (
+                {foundationBase != null ? (
                   <SubRow
                     label="Base (B) of Foundation"
-                    value={foundationBase.toFixed(2)}
+                    value={(foundationBase as number).toFixed(2)}
                     unit="m"
                     accent="text-blue-700"
                   />
