@@ -138,6 +138,7 @@ export default function LiquefactionSidebar({
 
   const foundationBase = predictionData?.foundation_recommendation?.base_m;
   const foundationDepth = predictionData?.foundation_recommendation?.depth_m;
+  const recommendFootingChange = predictionData?.foundation_recommendation?.recommend_footing_change ?? false;
 
   type RiskColor = { bg: string; border: string; text: string; bar: string; badge: string };
   const riskColorMap: Record<string, RiskColor> = {
@@ -533,15 +534,22 @@ export default function LiquefactionSidebar({
                 <SectionHeader title="Foundation Recommendation" />
 
                 {foundationBase != null ? (
-                  <SubRow
-                    label="Base (B) of Foundation"
-                    value={(foundationBase as number).toFixed(2)}
-                    unit="m"
-                    accent="text-blue-700"
-                  />
+                  <>
+                    <SubRow
+                      label="Base (B) of Foundation"
+                      value={(foundationBase as number).toFixed(2)}
+                      unit="m"
+                      accent="text-blue-700"
+                    />
+                    {recommendFootingChange && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        Settlement exceeds limit — consider deep or raft foundation.
+                      </p>
+                    )}
+                  </>
                 ) : (
                   <div className="py-2 text-xs text-slate-400">
-                    Base (B) — awaiting API data
+                    No data available
                   </div>
                 )}
               </div>
