@@ -29,6 +29,7 @@ export default function Landing({ onRequestPrediction }: LandingProps) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsLoggedIn(sessionStorage.getItem("admin_authenticated") === "true");
   }, []);
   const searchInputRef = useRef<HTMLDivElement>(null);
